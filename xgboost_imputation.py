@@ -163,6 +163,8 @@ def collapse_hla(df_hla,args):
     return hla_coll
 
 def min_allele_filter(_df_snps,_df_hla,args):
+    if args.two_fields == True:
+        _df_hla = pd.Series(_df_hla).str.extract(r'(HLA_[A-Za-z0-9_]*[0-9]*:[0-9]*)')[0].to_numpy()
     count_alleles = collections.Counter(_df_hla)
     min_ac_t = args.min_ac
     alleles_to_keep = pd.DataFrame(dict(count_alleles),index=['counts']).transpose().query('counts >= @min_ac_t').index
@@ -179,11 +181,19 @@ def min_allele_filter(_df_snps,_df_hla,args):
 def prep_for_xgboost(_snps,_hla,args):
     le = LabelEncoder()
     le.fit(_hla)
-    dtrain = xgb.DMatrix(_snps.to_numpy(dtype = np.float32), label = le.transform(_hla), nthread = -1, feature_names = _snps.columns.to_list())
+    count_alleles = collections.Counter(_hla)
+    allele_names = count_alleles.keys()
+    count_alleles = pd.DataFrame(count_alleles, index = [0]).transpose()
+    count_alleles.columns = ['counts']
+    count_alleles['alleles'] = allele_names
+    df_hla = pd.DataFrame({'alleles': _hla})
+    df_hla = df_hla.merge(count_alleles,on='alleles',how='left',indicator=True)
+    min_count = min(df_hla['counts'])
+    df_hla['counts'] = min_count/df_hla['counts']
+    dtrain = xgb.DMatrix(_snps.to_numpy(dtype = np.float32), label = le.transform(_hla), nthread = -1, feature_names = _snps.columns.to_list(), weight = df_hla['counts'])
     pickle.dump(le, open(os.path.join(args.model_dir, 'train_'+ args.gene+ '_label_encoder.pkl'), 'wb'))
     dtrain.save_binary(os.path.join(args.model_dir, 'train_'+ args.gene+ '.buffer'))
     return
-
 
 def bayes_optim_hla(args):
     logger.log('Bayesian optimization at {}.'.format(time.ctime()))
@@ -232,7 +242,7 @@ def bayes_optim_hla(args):
         hyperparameter_bounds = {'max_depth' : (10,100),
                               'min_child_weight' : (1,20),
                               'subsample' : (0.5,0.95),
-                              'eta': (0.01,1),
+                              'eta': (0.01,0.3),
                               'gamma' : (0.0, 1),
                               'colsample_bytree':(0.1,0.95),
                               'max_delta_step':(0,10),
@@ -242,7 +252,7 @@ def bayes_optim_hla(args):
         hyperparameter_bounds = {'max_depth' : (10,100),
                               'min_child_weight' : (1,20),
                               'subsample' : (0.5,0.95),
-                              'eta': (0.01,1),
+                              'eta': (0.01,0.3),
                               'gamma' : (0.0, 1),
                               'colsample_bytree':(0.5,0.95),
                               'max_delta_step':(0,10),
@@ -259,7 +269,7 @@ def xgb_train_hla(args):
     logger.log('Gene '+str(args.gene))
     hla_optimizer = pickle.load(open(os.path.join(args.model_dir, 'train_'+ args.gene+ '_hla_optimizer.pkl'), 'rb'))
     param = pd.DataFrame(hla_optimizer).sort_values('target',ascending=False).reset_index(drop=True)['params'][0]
-    n_estimators = param['n_estimators']
+    n_estimators = math.ceil(param['n_estimators']*(1+1/args.nfolds))
     del param['n_estimators']
     param['nthread'] = args.threads
     param['max_depth'] = int(math.ceil(param['max_depth']))
@@ -355,23 +365,24 @@ def str2bool(v):
 #this is influenced by deep-hla code too
 def main():
     parser = argparse.ArgumentParser(description='Train a model using a HLA reference data.')
-    parser.add_argument('--ref', required=False, help='HLA reference data (.bgl.phased or .haps, and .bim format).', dest='ref')
-    parser.add_argument('--sample', required=False, help='Sample SNP data (.bim format).', dest='sample')
-    parser.add_argument('--gene',required=False, help='Gene to train model on (only one), named the same way as in the .model.json file. This is for testing and if reference cohort is very large. Defaults to None', default=None,dest='gene')
-    parser.add_argument('--hla', required=False, help='HLA information of the reference data (.hla.json format).', dest='hla')
-    parser.add_argument('--window',required=False,help='Extract SNPs around the gene position +/- bp window provided with this option. Only used if --gene is used. Defaults to 500000.',default=500000, dest='window')
-    parser.add_argument('--model-dir', required=False, help='Directory for saving trained models.', dest='model_dir')
-    parser.add_argument('--allele_present', default='T', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent presence of the HLA allele (default = T).', dest='allele_present')
-    parser.add_argument('--allele_absent', default='A', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent absence of the HLA allele (default = A).', dest='allele_absent')
+    parser.add_argument('--ref', type=str, required=False, help='HLA reference data (.bgl.phased or .haps, and .bim format).', dest='ref')
+    parser.add_argument('--sample', type=str, required=False, help='Sample SNP data (.bim format).', dest='sample')
+    parser.add_argument('--gene',type=str, required=False, help='Gene to train model on (only one), named the same way as in the .model.json file. This is for testing or if reference cohort is very large. Defaults to None', default=None,dest='gene')
+    parser.add_argument('--hla', type=str, required=False, help='HLA information of the reference data (.hla.json format).', dest='hla')
+    parser.add_argument('--window',type=int,required=False,help='Extract SNPs around the gene position +/- bp window provided with this option. Only used if --gene is used. Defaults to 500000.',default=500000, dest='window')
+    parser.add_argument('--model-dir', type=str,required=False, help='Directory for saving trained models.', dest='model_dir')
+    parser.add_argument('--allele_present', type=str, default='T', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent presence of the HLA allele (default = T).', dest='allele_present')
+    parser.add_argument('--allele_absent',type=str, default='A', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent absence of the HLA allele (default = A).', dest='allele_absent')
     parser.add_argument('--use_pandas', type=str2bool, nargs='?', default=False, const=True, choices=[True,False], required=False, help='Whether to use pandas read_table to read the beagle file (the default). If False, then use the open() function to read the file one line at a time and directly encode alleles in a numpy tensor. This requires less memory, but is slower for smaller files.')
-    parser.add_argument('--algo_phase',required=False,help='Which phase of the algorithm: data loading (data_loading), hyperparameter optimization (hyper_opt), xgboost training (xgb_train), predicting (pred).', dest='algo_phase')
-    parser.add_argument('--use_gpu',required=False,help='Whether to use gpus with the cuda engine (True) or not (False, the default). Only used in the cross-validation hyperparameterization optimization step.', default=False,dest='use_gpu')
-    parser.add_argument('--threads',required=False,help='Number of threads to use (Default=1).', default=1,dest='threads')
+    parser.add_argument('--algo_phase',type=str,required=False,help='Which phase of the algorithm: data loading (data_loading), hyperparameter optimization (hyper_opt), xgboost training (xgb_train), predicting (pred).', dest='algo_phase')
+    parser.add_argument('--use_gpu',type=bool,required=False,help='Whether to use gpus with the cuda engine (True) or not (False, the default). Only used in the cross-validation hyperparameterization optimization step.', default=False,dest='use_gpu')
+    parser.add_argument('--threads',type=int,required=False,help='Number of threads to use (Default=1).', default=1,dest='threads')
     parser.add_argument('--nfolds',required=False,type=int,help='Number of folds in 5-fold cross validation (Default=5).', default=5,dest='nfolds')
     parser.add_argument('--cv_seed', required=False,type=int,help='Random seed for cross validation (Default=1).', default=1,dest='cv_seed')
     parser.add_argument('--min_ac',required=False,type=int,help='Minimum HLA allele count to be included in the reference panel (Default=1)', default=1,dest='min_ac')
     parser.add_argument('--snps_for_imputation',required=False,type=str,help='The snps to be used for imputing HLA alleles in a new cohort. Given in bgl.phased format.', dest='snps_for_imputation')
-    parser.add_argument('--sample_for_imputation', required=False, help='SNP data (.bim format) of the SNPs used for imputating the new cohort.', dest='sample_for_imputation')
+    parser.add_argument('--sample_for_imputation',type=str, required=False, help='SNP data (.bim format) of the SNPs used for imputating the new cohort.', dest='sample_for_imputation')
+    parser.add_argument('--two_fields', type=bool, required=False, help='Whether to trim at two fields (True) or not (false, the default).',default=False, dest='two_fields')
     
     args = parser.parse_args()
 
