@@ -339,6 +339,12 @@ def load_new_snps(xgb_trained_model,args):
     
     return df_snps,list_samples
 
+#to finish
+def add_null_columns(df_snps,args):
+    current_feature_list = df_snps.columns
+    obj_feature_list = xgb_trained_model.feature_names
+    return
+
 def impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples):
     le = pickle.load(open(os.path.join(args.model_dir, 'train_'+ args.gene+ '_label_encoder.pkl'), 'rb'))
     data_to_impute = xgb.DMatrix(df_imputation_ready.to_numpy(dtype = np.float32), nthread = -1, feature_names = df_imputation_ready.columns.to_list())
@@ -375,14 +381,14 @@ def main():
     parser.add_argument('--allele_absent',type=str, default='A', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent absence of the HLA allele (default = A).', dest='allele_absent')
     parser.add_argument('--use_pandas', type=str2bool, nargs='?', default=False, const=True, choices=[True,False], required=False, help='Whether to use pandas read_table to read the beagle file (the default). If False, then use the open() function to read the file one line at a time and directly encode alleles in a numpy tensor. This requires less memory, but is slower for smaller files.')
     parser.add_argument('--algo_phase',type=str,required=False,help='Which phase of the algorithm: data loading (data_loading), hyperparameter optimization (hyper_opt), xgboost training (xgb_train), predicting (pred).', dest='algo_phase')
-    parser.add_argument('--use_gpu',type=bool,required=False,help='Whether to use gpus with the cuda engine (True) or not (False, the default). Only used in the cross-validation hyperparameterization optimization step.', default=False,dest='use_gpu')
+    parser.add_argument('--use_gpu',type=str2bool, nargs='?',required=False,const=True, choices=[True,False],help='Whether to use gpus with the cuda engine (True) or not (False, the default). Only used in the cross-validation hyperparameterization optimization step.', default=False,dest='use_gpu')
     parser.add_argument('--threads',type=int,required=False,help='Number of threads to use (Default=1).', default=1,dest='threads')
     parser.add_argument('--nfolds',required=False,type=int,help='Number of folds in 5-fold cross validation (Default=5).', default=5,dest='nfolds')
     parser.add_argument('--cv_seed', required=False,type=int,help='Random seed for cross validation (Default=1).', default=1,dest='cv_seed')
     parser.add_argument('--min_ac',required=False,type=int,help='Minimum HLA allele count to be included in the reference panel (Default=1)', default=1,dest='min_ac')
     parser.add_argument('--snps_for_imputation',required=False,type=str,help='The snps to be used for imputing HLA alleles in a new cohort. Given in bgl.phased format.', dest='snps_for_imputation')
     parser.add_argument('--sample_for_imputation',type=str, required=False, help='SNP data (.bim format) of the SNPs used for imputating the new cohort.', dest='sample_for_imputation')
-    parser.add_argument('--two_fields', type=bool, required=False, help='Whether to trim at two fields (True) or not (false, the default).',default=False, dest='two_fields')
+    parser.add_argument('--two_fields', type=str2bool, nargs='?',required=False,const=True, choices=[True,False], help='Whether to trim at two fields (True) or not (false, the default).',default=False, dest='two_fields')
     
     args = parser.parse_args()
 
@@ -410,6 +416,8 @@ def main():
         xgb_trained_model = xgb_pred_hla(args)
         df_new_snps,list_samples = load_new_snps(xgb_trained_model,args)
         df_new_transposed = snps_transpose(df_new_snps,check_variance=False)
+        #add something here to check if all alleles are there, and add them if not (in the same order, and with Nulls).
+        #df_new_transposed_nulls = add_null_columns(df_new_transposed)
         df_imputation_ready = alleles_to_binary(df_new_transposed)
         impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples)
         return
