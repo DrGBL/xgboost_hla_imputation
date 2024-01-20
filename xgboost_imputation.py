@@ -17,33 +17,28 @@ import math
 import collections
 import re
 
-#this block is from deep-hla code
-#BASE_DIR = os.path.dirname(__file__)
-#CUDA_IS_AVAILABLE = torch.cuda.is_available()
-#os.environ['KMP_DUPLICATE_LIB_OK']='True'
-logger = Logger('training.{}.log'.format(datetime.datetime.now().strftime('%y%m%d%H%M')))
-print('Logging to training.log.')
-
 def load_data(args):
 
     #loading the files has been based on deep-hla code
     logger.log('Training processes started at {}.'.format(time.ctime()))
+    
+    if args.build == 'grch38':
+        hla_info = pd.DataFrame({"HLA_F": {"pos": "29724053"},"HLA_G": {"pos": "29828432"},"HLA_A": {"pos": "29943150"},"HLA_E": {"pos": "30490120"},"HLA_C": {"pos": "31271470"},"HLA_B": {"pos": "31356562"},"HLA_DRA": {"pos": "32442957"},"HLA_DRB3": {"pos": "32453610"},"HLA_DRB5": {"pos": "32520772"},"HLA_DRB4": {"pos": "32546191"},"HLA_DRB1": {"pos": "32582967"},"HLA_DQA1": {"pos": "32641781"},"HLA_DQB1": {"pos": "32663517"},"HLA_DOB": {"pos": "32814816"},"HLA_DMB": {"pos": "32938068"},"HLA_DMA": {"pos": "32950207"},"HLA_DOA": {"pos": "33007786"},"HLA_DPA1": {"pos": "33071655"},"HLA_DPB1": {"pos": "33082951"}})
+    else:
+        return
 
     # Load files
-    print('Loading files...')
-    print('Loading .hla.json file.')
-    with open(args.hla + '.hla.json', 'r') as f:
-        hla_info = json.load(f)
-    print('Loading Reference .bim file.')
+    logger.log('Loading files...')
+    logger.log('Loading Reference .bim file.')
     ref_bim = pd.read_table(args.ref + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
-    print('Loading sample .bim file.')
+    logger.log('Loading sample .bim file.')
     sample_bim = pd.read_table(args.sample + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
 
     if not args.gene is None:
         start_pos = int(hla_info[args.gene]['pos']) - args.window
         end_pos = int(hla_info[args.gene]['pos']) + args.window
-        print(start_pos)
-        print(end_pos)
+        logger.log('Start position: '+ str(start_pos))
+        logger.log('End position: '+ str(end_pos))
         sample_bim = sample_bim.query('pos > @start_pos and pos < @end_pos')
     sample_bim = sample_bim.reset_index(drop=True)
     
@@ -71,15 +66,10 @@ def load_data(args):
 
     model_bim = ref_bim.iloc[np.where(concord_snp)[0]]
 
-    if not os.path.exists(args.model_dir):
-        os.mkdir(args.model_dir)
-    else:
-        print('Warning: Directory for saving models already exists.')
-
     model_bim.to_csv(os.path.join(args.model_dir, 'model_snps_used_' + args.gene + '.bim'), sep='\t', header=False, index=False)
     list_snps = model_bim['id']
 
-    print('Loading reference .bgl.phased file.')
+    logger.log('Loading reference .bgl.phased file.')
     if args.use_pandas == False:
         logger.log('Reading file with open().')
         data = []
@@ -172,8 +162,8 @@ def min_allele_filter(_df_snps,_df_hla,args):
     indices_to_keep.sort()
     df_hla_filtered = np.array(_df_hla)[indices_to_keep]
     df_snps_filtered = _df_snps.reset_index(drop=True).iloc[indices_to_keep,:].reset_index(drop=True)
-    print('Final number of chromosomes used: ' + str(df_snps_filtered.shape[0]))
-    print('Final number of unique HLA alleles used: ' + str(len(np.unique(df_hla_filtered))))
+    logger.log('Final number of chromosomes used: ' + str(df_snps_filtered.shape[0]))
+    logger.log('Final number of unique HLA alleles used: ' + str(len(np.unique(df_hla_filtered))))
     np.save(os.path.join(args.model_dir, 'list_alleles_' + args.gene + '.npy'),np.unique(df_hla_filtered))
     return df_snps_filtered,df_hla_filtered
     
@@ -181,16 +171,19 @@ def min_allele_filter(_df_snps,_df_hla,args):
 def prep_for_xgboost(_snps,_hla,args):
     le = LabelEncoder()
     le.fit(_hla)
-    count_alleles = collections.Counter(_hla)
-    allele_names = count_alleles.keys()
-    count_alleles = pd.DataFrame(count_alleles, index = [0]).transpose()
-    count_alleles.columns = ['counts']
-    count_alleles['alleles'] = allele_names
-    df_hla = pd.DataFrame({'alleles': _hla})
-    df_hla = df_hla.merge(count_alleles,on='alleles',how='left',indicator=True)
-    min_count = min(df_hla['counts'])
-    df_hla['counts'] = min_count/df_hla['counts']
-    dtrain = xgb.DMatrix(_snps.to_numpy(dtype = np.float32), label = le.transform(_hla), nthread = -1, feature_names = _snps.columns.to_list(), weight = df_hla['counts'])
+    if args.weighted_logloss == True:
+        count_alleles = collections.Counter(_hla)
+        allele_names = count_alleles.keys()
+        count_alleles = pd.DataFrame(count_alleles, index = [0]).transpose()
+        count_alleles.columns = ['counts']
+        count_alleles['alleles'] = allele_names
+        df_hla = pd.DataFrame({'alleles': _hla})
+        df_hla = df_hla.merge(count_alleles,on='alleles',how='left',indicator=True)
+        min_count = min(df_hla['counts'])
+        df_hla['counts'] = min_count/df_hla['counts']
+        dtrain = xgb.DMatrix(_snps.to_numpy(dtype = np.float32), label = le.transform(_hla), nthread = -1, feature_names = _snps.columns.to_list(), weight = df_hla['counts'])
+    else :
+        dtrain = xgb.DMatrix(_snps.to_numpy(dtype = np.float32), label = le.transform(_hla), nthread = -1, feature_names = _snps.columns.to_list())
     pickle.dump(le, open(os.path.join(args.model_dir, 'train_'+ args.gene+ '_label_encoder.pkl'), 'wb'))
     dtrain.save_binary(os.path.join(args.model_dir, 'train_'+ args.gene+ '.buffer'))
     return
@@ -290,7 +283,7 @@ def xgb_pred_hla(args):
     return xgb_trained_model
 
 def load_new_snps(xgb_trained_model,args):
-    print('Loading new snps .bgl.phased file.')
+    logger.log('Loading new snps .bgl.phased file.')
     
     #obtain the features of the trained xgboost model
     xgb_feat_names = xgb_trained_model.feature_names
@@ -370,11 +363,12 @@ def str2bool(v):
 
 #this is influenced by deep-hla code too
 def main():
+
     parser = argparse.ArgumentParser(description='Train a model using a HLA reference data.')
     parser.add_argument('--ref', type=str, required=False, help='HLA reference data (.bgl.phased or .haps, and .bim format).', dest='ref')
     parser.add_argument('--sample', type=str, required=False, help='Sample SNP data (.bim format).', dest='sample')
     parser.add_argument('--gene',type=str, required=False, help='Gene to train model on (only one), named the same way as in the .model.json file. This is for testing or if reference cohort is very large. Defaults to None', default=None,dest='gene')
-    parser.add_argument('--hla', type=str, required=False, help='HLA information of the reference data (.hla.json format).', dest='hla')
+    parser.add_argument('--build', type=str, required=False, choices=['grch38','grch37'], default='grch38', help='Chromosomal build, either grch38 (default) or grch37 (currently not supported).', dest='build')
     parser.add_argument('--window',type=int,required=False,help='Extract SNPs around the gene position +/- bp window provided with this option. Only used if --gene is used. Defaults to 500000.',default=500000, dest='window')
     parser.add_argument('--model-dir', type=str,required=False, help='Directory for saving trained models.', dest='model_dir')
     parser.add_argument('--allele_present', type=str, default='T', required=False, choices=['A','C','T','G'], help='Which base pair is chosen to represent presence of the HLA allele (default = T).', dest='allele_present')
@@ -389,9 +383,24 @@ def main():
     parser.add_argument('--snps_for_imputation',required=False,type=str,help='The snps to be used for imputing HLA alleles in a new cohort. Given in bgl.phased format.', dest='snps_for_imputation')
     parser.add_argument('--sample_for_imputation',type=str, required=False, help='SNP data (.bim format) of the SNPs used for imputating the new cohort.', dest='sample_for_imputation')
     parser.add_argument('--two_fields', type=str2bool, nargs='?',required=False,const=True, choices=[True,False], help='Whether to trim at two fields (True) or not (false, the default).',default=False, dest='two_fields')
+    parser.add_argument('--weighted_logloss', type=str2bool, nargs='?',required=False,const=True, choices=[True,False], help='Whether to use weighted (True) or unweighted (False, the recommended default) logloss function for training.',default=False, dest='weighted_logloss')
     
     args = parser.parse_args()
 
+    #this block is from deep-hla code
+    #BASE_DIR = os.path.dirname(__file__)
+    #CUDA_IS_AVAILABLE = torch.cuda.is_available()
+    #os.environ['KMP_DUPLICATE_LIB_OK']='True'
+    
+    if not os.path.exists(args.model_dir):
+        os.mkdir(args.model_dir)
+    if not os.path.exists(args.model_dir+'/logs'):
+        os.mkdir(os.path.join(args.model_dir,'logs'))
+    
+    global logger
+    logger = Logger(os.path.join(args.model_dir,'logs/'+ args.algo_phase +'.{}.log'.format(datetime.datetime.now().strftime('%y%m%d%H%M'))))
+    logger.log('Logging to training.log: '+args.model_dir+'/'+'logs/'+ args.algo_phase+ '.{}.log'.format(datetime.datetime.now().strftime('%y%m%d%H%M')))
+    
     
     if args.algo_phase == 'data_loading':
         df_snps,df_hla = load_data(args)
