@@ -1,7 +1,7 @@
 # xgboost_hla_imputation
 
 ## license
-https://creativecommons.org/licenses/by-nc-nd/4.0/
+Since the full license is difficult to read, this is shorter version of what it allows (for now): https://creativecommons.org/licenses/by-nc-nd/4.0/
 
 ## Introductory note
 This provides code to impute HLA alleles using an XGboost model
