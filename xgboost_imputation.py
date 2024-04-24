@@ -316,6 +316,9 @@ def load_new_snps(xgb_trained_model,args):
                     data.append(line)
         df_snps = pd.concat(df_snps_list,axis=0)
         df_snps.iloc[:,df_snps.shape[1]-1] = df_snps.iloc[:,df_snps.shape[1]-1].replace(r'\n','', regex=True) 
+        df_snps=df_snps.reset_index(drop=True)
+        df_snps.columns = range(0,df_snps.shape[1])
+        df_snps.rename(columns={0:'SNP'},inplace=True)
         num_sample = df_snps.shape[1] // 2  
     else:
         logger.log('Reading file with pandas.')
@@ -334,9 +337,11 @@ def load_new_snps(xgb_trained_model,args):
 
 #to finish
 def add_null_columns(df_snps,args):
-    current_feature_list = df_snps.columns
+    current_feature_list = df_snps.iloc[:,0]
     obj_feature_list = xgb_trained_model.feature_names
-    return
+    obj_feature_df = pd.DataFrame({'SNP':obj_feature_list})
+    df_snps_filled = obj_feature_df.merge(df_snps,how='left',on='SNP')
+    return df_snps_filled
 
 def impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples):
     le = pickle.load(open(os.path.join(args.model_dir, 'train_'+ args.gene+ '_label_encoder.pkl'), 'rb'))
@@ -424,7 +429,8 @@ def main():
         logger.log('XGboost prediction at {}.'.format(time.ctime()))
         xgb_trained_model = xgb_pred_hla(args)
         df_new_snps,list_samples = load_new_snps(xgb_trained_model,args)
-        df_new_transposed = snps_transpose(df_new_snps,check_variance=False)
+        df_new_snps_filled = add_null_columns(df_snps,args)
+        df_new_transposed = snps_transpose(df_new_snps_filled,check_variance=False)
         #add something here to check if all alleles are there, and add them if not (in the same order, and with Nulls).
         #df_new_transposed_nulls = add_null_columns(df_new_transposed)
         df_imputation_ready = alleles_to_binary(df_new_transposed)
