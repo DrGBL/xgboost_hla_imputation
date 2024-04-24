@@ -335,7 +335,6 @@ def load_new_snps(xgb_trained_model,args):
     
     return df_snps,list_samples
 
-#to finish
 def add_null_columns(df_snps,args):
     current_feature_list = df_snps.iloc[:,0]
     obj_feature_list = xgb_trained_model.feature_names
@@ -431,8 +430,6 @@ def main():
         df_new_snps,list_samples = load_new_snps(xgb_trained_model,args)
         df_new_snps_filled = add_null_columns(df_snps,args)
         df_new_transposed = snps_transpose(df_new_snps_filled,check_variance=False)
-        #add something here to check if all alleles are there, and add them if not (in the same order, and with Nulls).
-        #df_new_transposed_nulls = add_null_columns(df_new_transposed)
         df_imputation_ready = alleles_to_binary(df_new_transposed)
         impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples)
         return
