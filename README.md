@@ -36,3 +36,41 @@ python -u xgboost_imputation.py \
   --algo_phase data_loading \
   --min_ac 0
 ```
+The list of supported genes is:
+Class I: HLA_A, HLA_B, HLA_C, HLA_E, HLA_F, HLA_G
+Class II: HLA_DRB1, HLA_DRB3, HLA_DRB4, and HLA_DRB5, HLA_DPA1, HLA_DPB1, HLA_DQA1, HLA_DQB1, HLA_DRA, HLA_DOA, HLA_DOB, HLA_DMA, HLA_DMB
+For HLA_DRB3, HLA_DRB4, and HLA_DRB5, the algorithm will work, but requires more validation.
+
+### Tune hyperparameters with cross-validation
+```
+python -u xgboost_imputation.py \
+  --gene ${gene_choice} \
+  --model-dir ${pathOut}xgboost_${gene_choice} \
+  --algo_phase hyper_opt \
+  --use_gpu False \
+  --nfolds 5 \
+  --threads 40 \
+  --cv_seed 250
+```
+
+### Train the algorithm using the best hyperparameters obtained above
+```
+python -u xgboost_imputation.py 
+  --gene ${gene_choice} \
+  --model-dir ${pathOut}xgboost_${gene_choice} \
+  --algo_phase xgb_train
+```
+
+### Impute a target sample
+```
+beagle_for_imputation=bgl.phased file of the SNPs from the target sample
+bim_for_imputation=bim file corresponding to the bgl.phased file above
+
+python -u xgboost_imputation.py \
+  --snps_for_imputation ${beagle_for_imputation} \
+  --sample_for_imputation ${bim_for_imputation} \
+  --gene ${gene_choice} \
+  --model-dir ${pathOut}xgboost_${gene_choice} \
+  --use_pandas False \
+  --algo_phase impute
+```
