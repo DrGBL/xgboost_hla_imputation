@@ -39,7 +39,7 @@ python -u xgboost_imputation.py \
 The list of supported genes is:
 Class I: HLA_A, HLA_B, HLA_C, HLA_E, HLA_F, HLA_G
 
-Class II: HLA_DRB1, HLA_DRB3, HLA_DRB4, and HLA_DRB5, HLA_DPA1, HLA_DPB1, HLA_DQA1, HLA_DQB1, HLA_DRA, HLA_DOA, HLA_DOB, HLA_DMA, HLA_DMB
+Class II: HLA_DRB1, HLA_DRB3, HLA_DRB4, HLA_DRB5, HLA_DPA1, HLA_DPB1, HLA_DQA1, HLA_DQB1, HLA_DRA, HLA_DOA, HLA_DOB, HLA_DMA, HLA_DMB
 
 For HLA_DRB3, HLA_DRB4, and HLA_DRB5, the algorithm will work, but requires more validation.
 
