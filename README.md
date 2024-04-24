@@ -10,7 +10,7 @@ Only one big requirement now: all SNPs in both the reference sample and the targ
 
 This is inconvenient but easy to fix with bcftools and a reference genome:
 ```
-pathRef=GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+pathRef=GRCH38.fna.gz
 pathVCF=your vcf
 pathOut=output path of vcf.gz file
 
