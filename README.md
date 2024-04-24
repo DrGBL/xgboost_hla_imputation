@@ -1,4 +1,9 @@
 # xgboost_hla_imputation
+
+## license
+https://creativecommons.org/licenses/by-nc-nd/4.0/
+
+## Introductory note
 This provides code to impute HLA alleles using an XGboost model
 
 Only one big requirement now: all SNPs in both the reference sample and the target sample (i.e. the one to impute) need to be encoded this way: "chr:pos:a1:a2". Here, a1 and a2 are the two alleles for that SNP.
