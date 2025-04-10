@@ -342,7 +342,7 @@ def load_new_snps(xgb_trained_model,args):
     
     return df_snps,list_samples
 
-def add_null_columns(df_snps,args):
+def add_null_columns(df_snps,xgb_trained_model):
     current_feature_list = df_snps.iloc[:,0]
     obj_feature_list = xgb_trained_model.feature_names
     obj_feature_df = pd.DataFrame({'SNP':obj_feature_list})
