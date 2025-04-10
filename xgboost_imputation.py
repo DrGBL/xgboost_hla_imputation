@@ -29,16 +29,15 @@ def load_data(args):
 
     # Load files
     logger.log('Loading files...')
-    logger.log('Loading Reference .bim file.')
-    ref_bim = pd.read_table(args.ref + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
-    logger.log('Loading sample .bim file.')
+    logger.log('Loading Reference .bim file [' + args.ref_bim +'.bim].')
+    ref_bim = pd.read_table(args.ref_bim + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
+    logger.log('Loading sample .bim file [' + args.sample + '.bim].')
     sample_bim = pd.read_table(args.sample + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
 
     if not args.gene is None:
         start_pos = int(hla_info[args.gene]['pos']) - args.window
         end_pos = int(hla_info[args.gene]['pos']) + args.window
-        logger.log('Start position: '+ str(start_pos))
-        logger.log('End position: '+ str(end_pos))
+        logger.log('GENE '+ args.gene + 'Start position: ['+ str(start_pos)+'] - End position: ['+ str(end_pos)+']')
         sample_bim = sample_bim.query('pos > @start_pos and pos < @end_pos')
     sample_bim = sample_bim.reset_index(drop=True)
     
