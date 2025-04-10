@@ -329,7 +329,15 @@ def load_new_snps(xgb_trained_model,args):
     
     
     with open(args.snps_for_imputation, 'r') as file:
-        list_samples = re.sub('P pedigree',"",re.sub('\n', " ", file.readline()))
+        first_line = re.sub('\n', " ", file.readline())
+        if first_line.strip().startswith('P pedigree'):
+            list_samples = re.sub('P pedigree', '', first_line)
+        elif first_line.strip().startswith('I id'):
+            list_samples = re.sub('I id', '', first_line)
+        else:
+            logger.log("ERROR: The file doesn't start with 'P pedigree' or 'I id'.")
+        sys.exit(1)
+
     list_samples = list_samples[1:-1].split(' ')
     
     return df_snps,list_samples
