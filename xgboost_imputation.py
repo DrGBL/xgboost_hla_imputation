@@ -78,7 +78,7 @@ def load_data(args):
         df_hla = pd.DataFrame()
         df_snps_list = []
         df_hla_list = []
-        with open(args.ref + '.bgl.phased') as my_file:
+        with open(args.ref_bgl + '.bgl.phased') as my_file:
             for line in my_file:
                 count=count+1
                 if count % 1000 == 0:
@@ -103,7 +103,7 @@ def load_data(args):
         num_ref = df_snps.shape[1] // 2  
     else:
         logger.log('Reading file with pandas.')
-        ref_phased = pd.read_table(args.ref + '.bgl.phased', sep='\t|\s+', header=None, engine='python', skiprows=5).iloc[:, 1:]
+        ref_phased = pd.read_table(args.ref_bgl + '.bgl.phased', sep='\t|\s+', header=None, engine='python', skiprows=5).iloc[:, 1:]
         df_snps = ref_phased.iloc[np.where(concord_snp)[0]]
         if not args.gene is None:
             df_hla = ref_phased[ref_phased[1].str.startswith('HLA')]
@@ -376,7 +376,8 @@ def str2bool(v):
 def main():
 
     parser = argparse.ArgumentParser(description='Train a model using a HLA reference data.')
-    parser.add_argument('--ref', type=str, required=False, help='HLA reference data (.bgl.phased or .haps, and .bim format).', dest='ref')
+    parser.add_argument('--ref_bgl', type=str, required=False, help='HLA reference Beagle format phased haplotype file (.bgl.phased).', dest='ref_bgl')
+    parser.add_argument('--ref_bim', type=str, required=False, help='HLA reference extended variant information file (bim format).', dest='ref_bim')
     parser.add_argument('--sample', type=str, required=False, help='Sample SNP data (.bim format).', dest='sample')
     parser.add_argument('--gene',type=str, required=False, help='Gene to train model on (only one), named the same way as in the .model.json file. This is for testing or if reference cohort is very large. Defaults to None', default=None,dest='gene')
     parser.add_argument('--build', type=str, required=False, choices=['grch38','grch37'], default='grch38', help='Chromosomal build, either grch38 (default) or grch37 (currently not supported).', dest='build')
