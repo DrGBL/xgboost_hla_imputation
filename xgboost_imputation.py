@@ -435,7 +435,7 @@ def main():
         logger.log('XGboost prediction at {}.'.format(time.ctime()))
         xgb_trained_model = xgb_pred_hla(args)
         df_new_snps,list_samples = load_new_snps(xgb_trained_model,args)
-        df_new_snps_filled = add_null_columns(df_snps,args)
+        df_new_snps_filled = add_null_columns(df_new_snps,xgb_trained_model)
         df_new_transposed = snps_transpose(df_new_snps_filled,check_variance=False)
         df_imputation_ready = alleles_to_binary(df_new_transposed)
         impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples)
