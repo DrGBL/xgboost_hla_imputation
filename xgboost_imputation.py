@@ -29,16 +29,15 @@ def load_data(args):
 
     # Load files
     logger.log('Loading files...')
-    logger.log('Loading Reference .bim file.')
-    ref_bim = pd.read_table(args.ref + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
-    logger.log('Loading sample .bim file.')
+    logger.log('Loading Reference .bim file [' + args.ref_bim +'.bim].')
+    ref_bim = pd.read_table(args.ref_bim + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
+    logger.log('Loading sample .bim file [' + args.sample + '.bim].')
     sample_bim = pd.read_table(args.sample + '.bim', sep='\t|\s+', names=['chr', 'id', 'dist', 'pos', 'a1', 'a2'], header=None, engine='python')
 
     if not args.gene is None:
         start_pos = int(hla_info[args.gene]['pos']) - args.window
         end_pos = int(hla_info[args.gene]['pos']) + args.window
-        logger.log('Start position: '+ str(start_pos))
-        logger.log('End position: '+ str(end_pos))
+        logger.log('GENE '+ args.gene + 'Start position: ['+ str(start_pos)+'] - End position: ['+ str(end_pos)+']')
         sample_bim = sample_bim.query('pos > @start_pos and pos < @end_pos')
     sample_bim = sample_bim.reset_index(drop=True)
     
@@ -79,7 +78,7 @@ def load_data(args):
         df_hla = pd.DataFrame()
         df_snps_list = []
         df_hla_list = []
-        with open(args.ref + '.bgl.phased') as my_file:
+        with open(args.ref_bgl + '.bgl.phased') as my_file:
             for line in my_file:
                 count=count+1
                 if count % 1000 == 0:
@@ -104,7 +103,7 @@ def load_data(args):
         num_ref = df_snps.shape[1] // 2  
     else:
         logger.log('Reading file with pandas.')
-        ref_phased = pd.read_table(args.ref + '.bgl.phased', sep='\t|\s+', header=None, engine='python', skiprows=5).iloc[:, 1:]
+        ref_phased = pd.read_table(args.ref_bgl + '.bgl.phased', sep='\t|\s+', header=None, engine='python', skiprows=5).iloc[:, 1:]
         df_snps = ref_phased.iloc[np.where(concord_snp)[0]]
         if not args.gene is None:
             df_hla = ref_phased[ref_phased[1].str.startswith('HLA')]
@@ -330,12 +329,20 @@ def load_new_snps(xgb_trained_model,args):
     
     
     with open(args.snps_for_imputation, 'r') as file:
-        list_samples = re.sub('P pedigree',"",re.sub('\n', " ", file.readline()))
+        first_line = re.sub('\n', " ", file.readline())
+        if first_line.strip().startswith('P pedigree'):
+            list_samples = re.sub('P pedigree', '', first_line)
+        elif first_line.strip().startswith('I id'):
+            list_samples = re.sub('I id', '', first_line)
+        else:
+            logger.log("ERROR: The file doesn't start with 'P pedigree' or 'I id'.")
+        sys.exit(1)
+
     list_samples = list_samples[1:-1].split(' ')
     
     return df_snps,list_samples
 
-def add_null_columns(df_snps,args):
+def add_null_columns(df_snps,xgb_trained_model):
     current_feature_list = df_snps.iloc[:,0]
     obj_feature_list = xgb_trained_model.feature_names
     obj_feature_df = pd.DataFrame({'SNP':obj_feature_list})
@@ -369,7 +376,8 @@ def str2bool(v):
 def main():
 
     parser = argparse.ArgumentParser(description='Train a model using a HLA reference data.')
-    parser.add_argument('--ref', type=str, required=False, help='HLA reference data (.bgl.phased or .haps, and .bim format).', dest='ref')
+    parser.add_argument('--ref_bgl', type=str, required=False, help='HLA reference Beagle format phased haplotype file (.bgl.phased).', dest='ref_bgl')
+    parser.add_argument('--ref_bim', type=str, required=False, help='HLA reference extended variant information file (bim format).', dest='ref_bim')
     parser.add_argument('--sample', type=str, required=False, help='Sample SNP data (.bim format).', dest='sample')
     parser.add_argument('--gene',type=str, required=False, help='Gene to train model on (only one), named the same way as in the .model.json file. This is for testing or if reference cohort is very large. Defaults to None', default=None,dest='gene')
     parser.add_argument('--build', type=str, required=False, choices=['grch38','grch37'], default='grch38', help='Chromosomal build, either grch38 (default) or grch37 (currently not supported).', dest='build')
@@ -428,7 +436,7 @@ def main():
         logger.log('XGboost prediction at {}.'.format(time.ctime()))
         xgb_trained_model = xgb_pred_hla(args)
         df_new_snps,list_samples = load_new_snps(xgb_trained_model,args)
-        df_new_snps_filled = add_null_columns(df_snps,args)
+        df_new_snps_filled = add_null_columns(df_new_snps,xgb_trained_model)
         df_new_transposed = snps_transpose(df_new_snps_filled,check_variance=False)
         df_imputation_ready = alleles_to_binary(df_new_transposed)
         impute_the_hla(args,df_imputation_ready,xgb_trained_model,list_samples)

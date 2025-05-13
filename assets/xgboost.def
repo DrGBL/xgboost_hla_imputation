@@ -1,0 +1,109 @@
+BootStrap: docker
+From: mambaorg/micromamba:1.5.10-noble
+
+%post
+    # Configure les channels pour micromamba
+    micromamba config append channels conda-forge
+    micromamba config append channels bioconda
+    micromamba config append channels defaults
+
+    # Installer les outils de base dans l'environnement `base`
+    micromamba install -y -n base conda-forge::git conda-forge::procps-ng bioconda::bcftools bioconda::htslib bioconda::samtools conda-forge::openjdk
+
+    # S'assurer que le PATH est correctement configuré
+    export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
+
+    # Exporter l'environnement pour traçabilité
+    micromamba env export --name base --explicit > environment.lock
+    micromamba clean -a -y
+
+    # Créer et configurer l'environnement `xgboost_env`
+    micromamba create -n xgboost_env python=3.8.6 -y
+    cd /opt
+    git clone https://github.com/DrGBL/xgboost_hla_imputation.git
+    cd xgboost_hla_imputation
+    rm -rf .git
+    micromamba run -n xgboost_env pip install --no-cache-dir -r python_requirements.txt
+    chmod +x xgboost_imputation.py
+    echo '#!/bin/bash
+    export XDG_CACHE_HOME=/tmp/mamba-cache
+    exec micromamba run -n xgboost_env python -u /opt/xgboost_hla_imputation/xgboost_imputation.py "$@"' > /usr/local/bin/xgboost_imputation
+    chmod +x /usr/local/bin/xgboost_imputation
+
+    # Créer et configurer l'environnement `snp2hla_redux_env`
+    micromamba create -n snp2hla_redux_env python=3.6 -y
+    micromamba install -y -n snp2hla_redux_env r-base=3.6 openjdk pandas
+    micromamba run -n snp2hla_redux_env R -e "
+        install.packages(c('lattice', 'cpp11'), repos='https://cloud.r-project.org');
+        install.packages(c('argparse', 'stringr', 'purrr', 'dplyr', 'multidplyr', 'tidyr', 'data.table', 'parallel', 'rcompanion'), repos='https://cloud.r-project.org', dependencies=TRUE)
+    "
+    cd /opt
+    git clone https://github.com/DrGBL/snp2hla_redux.git
+    rm -rf .git
+
+    chmod +x /opt/snp2hla_redux/Adjusted_CookHLA.sh
+    ln -s /opt/snp2hla_redux/Adjusted_CookHLA.sh /usr/local/bin/Adjusted_CookHLA
+
+    chmod +x /opt/snp2hla_redux/MakeReference/src/Adjust_output.sh
+    ln -s /opt/snp2hla_redux/MakeReference/src/Adjust_output.sh /usr/local/bin/Adjust_output
+    
+    chmod +x /opt/snp2hla_redux/dependency/plink
+    ln -s /opt/snp2hla_redux/dependency/plink /usr/local/bin/plink
+
+    echo '#!/bin/bash
+    java -jar  /opt/snp2hla_redux/dependency/beagle.jar "$@"' > /usr/local/bin/beagle
+    chmod +x /usr/local/bin/beagle
+
+    echo '#!/bin/bash
+    java -jar  /opt/snp2hla_redux/dependency/beagle2linkage.jar "$@"' > /usr/local/bin/beagle2linkage
+    chmod +x /usr/local/bin/beagle2linkage
+
+    echo '#!/bin/bash
+    java -jar  /opt/snp2hla_redux/dependency/beagle2vcf.jar "$@"' > /usr/local/bin/beagle2vcf
+    chmod +x /usr/local/bin/beagle2vcf
+
+     echo '#!/bin/bash
+    java -jar  /opt/snp2hla_redux/dependency/vcf2beagle.jar "$@"' > /usr/local/bin/vcf2beagle
+    chmod +x /usr/local/bin/vcf2beagle
+
+    echo '#!/bin/bash
+    java -jar  /opt/snp2hla_redux/dependency/linkage2beagle.jar "$@"' > /usr/local/bin/linkage2beagle
+    chmod +x /usr/local/bin/linkage2beagle
+
+    echo '#!/bin/bash
+    export XDG_CACHE_HOME=/tmp/mamba-cache
+    exec micromamba run -n snp2hla_redux_env python -m MakeReference --dependency /opt/snp2hla_redux/dependency "$@"' > /usr/local/bin/MakeReference
+    chmod +x /usr/local/bin/MakeReference
+
+    echo '#!/bin/bash
+    export XDG_CACHE_HOME=/tmp/mamba-cache
+    exec micromamba run -n snp2hla_redux_env python -m SNP2HLA "$@"' > /usr/local/bin/SNP2HLA
+    chmod +x /usr/local/bin/SNP2HLA
+    
+    echo '#!/bin/bash
+    export XDG_CACHE_HOME=/tmp/mamba-cache
+    exec micromamba run -n snp2hla_redux_env python -m MakeGeneticMap "$@"' > /usr/local/bin/MakeGeneticMap
+    chmod +x /usr/local/bin/MakeGeneticMap
+
+    micromamba clean -a -y
+
+
+%environment
+    export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
+    export PYTHONPATH=/opt/snp2hla_redux:/opt/xgboost_hla_imputation:$PYTHONPATH
+
+%test
+    echo "Testing bcftools..."
+    bcftools --version || exit 1
+    echo "Testing htslib..."
+    htsfile --version || exit 1
+    echo "Testing samtools..."
+    samtools --version || exit 1
+    echo "Testing xgboost_imputation..."
+    xgboost_imputation --help || exit 1
+    echo "Testing MakeReference..."
+    MakeReference --help || exit 1
+    echo "Testing SNP2HLA..."
+    SNP2HLA --help || exit 1
+    echo "Testing Adjusted_CookHLA..."
+    Adjusted_CookHLA --help || exit 1
