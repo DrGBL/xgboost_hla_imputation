@@ -336,7 +336,7 @@ def load_new_snps(xgb_trained_model,args):
             list_samples = re.sub('I id', '', first_line)
         else:
             logger.log("ERROR: The file doesn't start with 'P pedigree' or 'I id'.")
-        sys.exit(1)
+            sys.exit(1)
 
     list_samples = list_samples[1:-1].split(' ')
     
